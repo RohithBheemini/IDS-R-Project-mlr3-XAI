@@ -34,7 +34,7 @@ add_engineered_features <- function(dt) {
   # Justification: Bathrooms are a premier valuation driver; full baths and half baths contribute additively
   # Formula: Full_Bath + 0.5 * Half_Bath + Bsmt_Full_Bath + 0.5 * Bsmt_Half_Bath
   dt[, Total_Bathrooms := Full_Bath + 0.5 * Half_Bath +
-                          fcoalesce(Bsmt_Full_Bath, 0L) + 0.5 * fcoalesce(Bsmt_Half_Bath, 0L)]
+                          fcoalesce(as.numeric(Bsmt_Full_Bath), 0) + 0.5 * fcoalesce(as.numeric(Bsmt_Half_Bath), 0)]
 
   # 3. Total Porch & Outdoor Living Square Footage
   # Justification: Aggregates fragmented exterior deck and porch attributes into a unified metric
