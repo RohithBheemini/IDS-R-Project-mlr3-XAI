@@ -1,0 +1,22 @@
+# R environment and history
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+
+# renv library (lockfile should be committed, library excluded)
+renv/library/
+renv/local/
+renv/staging/
+
+# Output artifacts that are large or transient
+*.rds
+*.RData
+*.tmp
+*.log
+
+# Windows thumbnail and system files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
