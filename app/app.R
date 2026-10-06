@@ -322,7 +322,17 @@ ui <- page_navbar(
           card_body(
             layout_columns(
               col_widths = c(7, 5),
-              plotOutput("plot_shap_local", height = "360px"),
+              navset_card_tab(
+                title = "Attribution & Sensitivity",
+                nav_panel(
+                  "SHAP Value Drivers",
+                  plotOutput("plot_shap_local", height = "360px")
+                ),
+                nav_panel(
+                  "Living Area Curve",
+                  plotOutput("plot_sensitivity_curve", height = "360px")
+                )
+              ),
               div(
                 h5(class = "fw-bold text-primary", "Property Specification Snapshot"),
                 uiOutput("ui_profile_summary"),
@@ -510,27 +520,39 @@ ui <- page_navbar(
     title = "Dataset & EDA",
     icon = icon("chart-pie"),
     layout_columns(
-      col_widths = c(6, 6, 6, 6),
+      col_widths = c(6, 6, 6, 6, 6, 6),
       card(
-        card_header(class = "fw-bold", "Target Distribution: Sale Price (Raw vs Log10)"),
+        card_header(class = "fw-bold", "1. Target Distribution: Raw Sale Price (USD)"),
         card_body(
           tags$img(src = "figures/eda_01_target_distribution_raw.png", style = "width: 100%; border-radius: 6px;")
         )
       ),
       card(
-        card_header(class = "fw-bold", "Top Predictors Correlated with Sale Price"),
+        card_header(class = "fw-bold", "2. Target Distribution: Log10 Transformed Sale Price"),
         card_body(
-          tags$img(src = "figures/eda_03_top_correlations.png", style = "width: 100%; border-radius: 6px;")
+          tags$img(src = "figures/eda_02_target_distribution_log.png", style = "width: 100%; border-radius: 6px;")
         )
       ),
       card(
-        card_header(class = "fw-bold", "Overall Quality Rating vs Sale Price"),
+        card_header(class = "fw-bold", "3. Above-Ground Living Area vs Sale Price"),
+        card_body(
+          tags$img(src = "figures/eda_05_gr_liv_area_vs_price.png", style = "width: 100%; border-radius: 6px;")
+        )
+      ),
+      card(
+        card_header(class = "fw-bold", "4. Overall Quality Rating vs Sale Price"),
         card_body(
           tags$img(src = "figures/eda_04_overall_qual_vs_price.png", style = "width: 100%; border-radius: 6px;")
         )
       ),
       card(
-        card_header(class = "fw-bold", "Engineered Features Correlation Validation"),
+        card_header(class = "fw-bold", "5. Top Predictors Correlated with Sale Price"),
+        card_body(
+          tags$img(src = "figures/eda_03_top_correlations.png", style = "width: 100%; border-radius: 6px;")
+        )
+      ),
+      card(
+        card_header(class = "fw-bold", "6. Engineered Features Correlation Validation"),
         card_body(
           tags$img(src = "figures/eda_07_engineered_features_correlations.png", style = "width: 100%; border-radius: 6px;")
         )
@@ -655,16 +677,38 @@ server <- function(input, output, session) {
     )
   })
 
-  # What-If Marginal Sensitivity
+  # What-If Marginal Sensitivity (Live Calculations)
   output$ui_what_if_sensitivity <- renderUI({
+    h <- user_house()
     p <- predicted_val()
+    
+    # Calculate live marginal delta for +200 sq ft
+    h_area <- copy(h)
+    h_area$Gr_Liv_Area <- as.integer(h$Gr_Liv_Area + 200L)
+    h_area <- add_engineered_features(h_area)
+    pred_area <- if (!is.null(final_pipeline)) final_pipeline$predict_newdata(h_area)$response else p + 16000
+    delta_area <- pred_area - p
+    
+    # Calculate live marginal delta for +1 full bath
+    h_bath <- copy(h)
+    h_bath$Full_Bath <- as.integer(h$Full_Bath + 1L)
+    h_bath <- add_engineered_features(h_bath)
+    pred_bath <- if (!is.null(final_pipeline)) final_pipeline$predict_newdata(h_bath)$response else p + 9500
+    delta_bath <- pred_bath - p
+    
+    # Calculate live marginal delta for remodel update
+    h_remod <- copy(h)
+    h_remod$Year_Remod_Add <- 2010L
+    h_remod <- add_engineered_features(h_remod)
+    pred_remod <- if (!is.null(final_pipeline)) final_pipeline$predict_newdata(h_remod)$response else p + 12000
+    delta_remod <- pred_remod - p
+
     tags$div(
       tags$ul(
         class = "list-unstyled small mb-0",
-        tags$li(icon("plus", class = "text-success me-1"), strong("+200 sq ft Living Space: "), sprintf("~ +%s estimated lift", format_currency(16500))),
-        tags$li(icon("plus", class = "text-success me-1"), strong("+1 Full Bathroom: "), sprintf("~ +%s estimated lift", format_currency(9200))),
-        tags$li(icon("plus", class = "text-success me-1"), strong("+1 Quality Grade Step: "), sprintf("~ +%s estimated lift", format_currency(22000))),
-        tags$li(icon("wrench", class = "text-info me-1"), strong("Complete Recent Remodel: "), sprintf("~ +%s estimated lift", format_currency(14800)))
+        tags$li(icon("plus", class = "text-success me-1"), strong("+200 sq ft Living Space: "), sprintf("%s%s estimated impact", ifelse(delta_area >= 0, "+", "-"), format_currency(abs(delta_area)))),
+        tags$li(icon("plus", class = "text-success me-1"), strong("+1 Full Bathroom: "), sprintf("%s%s estimated impact", ifelse(delta_bath >= 0, "+", "-"), format_currency(abs(delta_bath)))),
+        tags$li(icon("wrench", class = "text-info me-1"), strong("Update Remodel to 2010: "), sprintf("%s%s estimated impact", ifelse(delta_remod >= 0, "+", "-"), format_currency(abs(delta_remod))))
       )
     )
   })
@@ -711,6 +755,50 @@ server <- function(input, output, session) {
       ) +
       get_project_theme() +
       theme(legend.position = "bottom")
+  })
+
+  # What-If Living Area Sensitivity Curve
+  output$plot_sensitivity_curve <- renderPlot({
+    req(user_house())
+    h <- user_house()
+    current_area <- h$Gr_Liv_Area
+    current_pred <- predicted_val()
+    
+    # Evaluate across living area range 800 to 3600 sq ft
+    area_grid <- seq(800, 3600, by = 200)
+    grid_houses <- rbindlist(lapply(area_grid, function(a) {
+      row <- copy(h)
+      row$Gr_Liv_Area <- as.integer(a)
+      row <- add_engineered_features(row)
+      row
+    }))
+    
+    if (!is.null(final_pipeline)) {
+      preds <- final_pipeline$predict_newdata(grid_houses)$response
+    } else {
+      preds <- 180800 + (area_grid - 1500) * 80
+    }
+    
+    curve_dt <- data.table(Area = area_grid, Price = preds)
+    
+    ggplot(curve_dt, aes(x = Area, y = Price)) +
+      geom_line(color = "#1D4ED8", linewidth = 1.3) +
+      geom_point(color = "#1D4ED8", size = 2.5) +
+      geom_point(data = data.frame(Area = current_area, Price = current_pred),
+                 aes(x = Area, y = Price), color = "#DC2626", size = 4.5, shape = 18) +
+      geom_text(data = data.frame(Area = current_area, Price = current_pred),
+                aes(x = Area, y = Price),
+                label = sprintf(" Current Home\n (%s sq ft, %s)", format(current_area, big.mark = ","), format_currency(current_pred)),
+                hjust = -0.08, vjust = 0.5, fontface = "bold", color = "#991B1B", size = 3.6) +
+      scale_x_continuous(labels = scales::comma_format(), limits = c(700, 4200)) +
+      scale_y_continuous(labels = scales::dollar_format()) +
+      labs(
+        title = "What-If Living Area Sensitivity Trajectory",
+        subtitle = "Predicted price as square footage expands (all other features fixed)",
+        x = "Above Ground Living Area (sq ft)",
+        y = "Predicted Valuation (USD)"
+      ) +
+      get_project_theme()
   })
 
   # Assumptions Audit Table
