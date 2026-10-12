@@ -58,7 +58,7 @@ tuning_instance <- ti(
 
 # 5. Execute optimization with random search tuner
 tuner <- tnr("random_search")
-log_step("TUNING", "Executing hyperparameter search (15 evaluations with 3-fold CV)...")
+log_step("TUNING", "Executing hyperparameter search (8 evaluations with 3-fold CV)...")
 tuner$optimize(tuning_instance)
 
 # 6. Extract results & best configuration

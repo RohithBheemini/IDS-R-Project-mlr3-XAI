@@ -18,7 +18,6 @@ suppressPackageStartupMessages({
   library(data.table)
   library(ggplot2)
   library(iml)
-  library(lime)
 })
 
 log_step("XAI", "Initializing Explainable AI Framework (SHAP + LIME)...")
@@ -198,48 +197,10 @@ p_shap_lux <- ggplot(head(shap_lux, 10), aes(x = reorder(feature, phi), y = phi,
 save_project_artifact(p_shap_lux, "xai_02_shap_luxury_waterfall.png", dir = "figures")
 
 # ------------------------------------------------------------------------------
-# 7. Local LIME Explanations
-# ------------------------------------------------------------------------------
-log_step("XAI", "Fitting LIME local surrogates on representative cases...")
-
-# Train LIME explainer on key features subset
-X_train_sub <- as.data.frame(X_train[, ..imp_features])
-explainer_lime <- lime(
-  x = X_train_sub,
-  model = final_pipeline,
-  bin_continuous = TRUE,
-  n_bins = 5
-)
-
-lime_model_type <- function(x, ...) "regression"
-lime_predict_model <- function(x, newdata, ...) {
-  # augment with full columns from background medians
-  full_newdata <- copy(X_background[rep(1, nrow(newdata)), ])
-  for (col in names(newdata)) {
-    full_newdata[[col]] <- newdata[[col]]
-  }
-  preds <- predict_fn(x, full_newdata)
-  data.frame(Prediction = preds)
-}
-
-lime_explanations <- list()
-for (case_name in names(case_indices)) {
-  case_row <- case_indices[[case_name]]
-  x_inst <- as.data.frame(X_test[case_row, ..imp_features])
-  
-  # Run simple local surrogate
-  preds_orig <- cases_info$Predicted[cases_info$Profile == case_name]
-  lime_explanations[[case_name]] <- list(
-    case_name = case_name,
-    actual = cases_info$Actual[cases_info$Profile == case_name],
-    predicted = preds_orig,
-    features = head(imp_features, 6)
-  )
-}
-
-# ------------------------------------------------------------------------------
-# 8. Comparison & Non-Causal Governance Report
+# 7. Model-Agnostic Governance & Non-Causal Report
 # PRD Ref: Section 12.4 (Constraints & Non-Causal Wording)
+# ------------------------------------------------------------------------------
+log_step("XAI", "Compiling XAI governance audit and non-causal disclosures...")
 # ------------------------------------------------------------------------------
 xai_governance <- list(
   methodology_disclaimer = paste(

@@ -8,9 +8,6 @@
 #' @param seed Integer seed value (default 42)
 set_project_seed <- function(seed = 42) {
   set.seed(seed)
-  if (requireNamespace("parallelly", quietly = TRUE)) {
-    # Ensure reproducible RNG streams if parallelization is engaged
-  }
   message(sprintf("[INFO] Random seed set to: %d", seed))
 }
 

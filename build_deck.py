@@ -983,5 +983,7 @@ for i, (ttitle, tdesc, col) in enumerate(lessons_plain):
 # -----------------------------------------------------------------------------
 output_path = "reports/Explainable_House_Price_Prediction_Presentation.pptx"
 prs.save(output_path)
-print(f"[SUCCESS] Presentation generated successfully: {output_path}")
+root_path = "Explainable_House_Price_Prediction_Presentation.pptx"
+prs.save(root_path)
+print(f"[SUCCESS] Presentation generated successfully: {output_path} and {root_path}")
 print(f"Total Slides: {len(prs.slides)}")

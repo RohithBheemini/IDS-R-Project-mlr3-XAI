@@ -12,7 +12,6 @@ suppressPackageStartupMessages({
   library(mlr3)
   library(mlr3pipelines)
   library(mlr3learners)
-  library(shiny)
 })
 
 cat("====================================================================\n")
